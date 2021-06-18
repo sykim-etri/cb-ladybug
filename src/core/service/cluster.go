@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -337,36 +338,62 @@ func CreateCluster(namespace string, req *model.ClusterReq) (*model.Cluster, err
 }
 
 func DeleteCluster(namespace string, clusterName string) (*model.Status, error) {
-	mcisName := clusterName //cluster 이름과 동일하게 (임시)
+	mcisName := clusterName
 
 	status := model.NewStatus()
 	status.Code = model.STATUS_UNKNOWN
 
-	// 1. delete mcis
-	logger.Infof("start delete MCIS (name=%s)", mcisName)
+	logger.Infof("start delete Cluster (name=%s)", mcisName)
 	mcis := tumblebug.NewMCIS(namespace, mcisName)
+	cluster := model.NewCluster(namespace, clusterName)
 	exist, err := mcis.GET()
 	if err != nil {
 		return status, err
 	}
 	if exist {
-		if err = mcis.DELETE(); err != nil {
+		logger.Infof("terminate MCIS (name=%s)", mcisName)
+		if err = mcis.TERMINATE(); err != nil {
+			logger.Errorf("terminate mcis error : %v", err)
 			return status, err
 		}
-		// sleep 이후 확인하는 로직 추가 필요
-		logger.Infof("delete MCIS OK.. (name=%s)", mcisName)
-		status.Code = model.STATUS_SUCCESS
-		status.Message = "success"
+		time.Sleep(5 * time.Second)
 
-		cluster := model.NewCluster(namespace, clusterName)
+		logger.Infof("delete MCIS (name=%s)", mcisName)
+		if err = mcis.DELETE(); err != nil {
+			if strings.Contains(err.Error(), "Deletion is not allowed") {
+				logger.Infof("refine mcis (name=%s)", mcisName)
+				if err = mcis.REFINE(); err != nil {
+					logger.Errorf("refine MCIS error : %v", err)
+					return status, err
+				}
+				logger.Infof("delete MCIS (name=%s)", mcisName)
+				if err = mcis.DELETE(); err != nil {
+					logger.Errorf("delete MCIS error : %v", err)
+					return status, err
+				}
+			} else {
+				logger.Errorf("delete MCIS error : %v", err)
+				return status, err
+			}
+		}
+
+		logger.Infof("delete MCIS OK.. (name=%s)", mcisName)
+		status.Message = fmt.Sprintf("cluster %s has been deleted", mcisName)
+
 		if err := cluster.Delete(); err != nil {
-			status.Message = "delete success but cannot delete from the store"
+			status.Message = fmt.Sprintf("cluster %s has been deleted but cannot delete from the store", mcisName)
 			return status, nil
 		}
 	} else {
-		status.Code = model.STATUS_NOT_EXIST
-		logger.Infof("delete MCIS skip (cannot find).. (name=%s)", mcisName)
+		logger.Infof("delete Cluster skip (MCIS cannot find).. (name=%s)", mcisName)
+		status.Message = fmt.Sprintf("cluster %s not found", mcisName)
+
+		if err := cluster.Delete(); err != nil {
+			status.Message = fmt.Sprintf("cluster %s not found and cannot delete from the store", mcisName)
+			return status, nil
+		}
 	}
 
+	status.Code = model.STATUS_SUCCESS
 	return status, nil
 }
