@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/cloud-barista/cb-ladybug/src/core/common"
-	"github.com/cloud-barista/cb-ladybug/src/utils/lang"
 )
 
 const (
@@ -51,6 +50,7 @@ func NewClusterList(namespace string) *ClusterList {
 	}
 }
 
+/*
 func (self *Cluster) Insert() error {
 	self.Status = STATUS_CREATED
 	return self.putStore()
@@ -147,6 +147,117 @@ func (self *ClusterList) SelectList() error {
 
 func getClusterNodes(cluster *Cluster) error {
 	nodeKeyValues, err := common.CBStore.GetList(lang.GetStoreNodeKey(cluster.Namespace, cluster.Name, ""), true)
+	if err != nil {
+		return err
+	}
+	for _, nodeKeyValue := range nodeKeyValues {
+		node := &Node{}
+		json.Unmarshal([]byte(nodeKeyValue.Value), &node)
+		cluster.Nodes = append(cluster.Nodes, *node)
+	}
+
+	return nil
+}
+*/
+
+func (self *Cluster) Insert(clusterKey string) error {
+	self.Status = STATUS_CREATED
+	return self.putStore(clusterKey)
+}
+
+func (self *Cluster) Update(clusterKey string) error {
+	self.Status = STATUS_PROVISIONING
+	return self.putStore(clusterKey)
+}
+
+func (self *Cluster) Complete(clusterKey string) error {
+	self.Status = STATUS_COMPLETED
+	return self.putStore(clusterKey)
+}
+
+func (self *Cluster) Fail(clusterKey string) error {
+	self.Status = STATUS_FAILED
+	return self.putStore(clusterKey)
+}
+
+func (self *Cluster) putStore(clusterKey string) error {
+	value, _ := json.Marshal(self)
+	err := common.CBStore.Put(clusterKey, string(value))
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (self *Cluster) Select(clusterKey string) error {
+	keyValue, err := common.CBStore.Get(clusterKey)
+	if err != nil {
+		return err
+	}
+	if keyValue == nil {
+		return errors.New(fmt.Sprintf("%s not found", clusterKey))
+	}
+	json.Unmarshal([]byte(keyValue.Value), &self)
+
+	nodeKey := clusterKey + "/nodes"
+	err = getClusterNodes(self, nodeKey)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (self *Cluster) Delete(clusterKey string) error {
+	// delete node
+	nodeKey := clusterKey + "/nodes"
+	keyValues, err := common.CBStore.GetList(nodeKey, true)
+	if err != nil {
+		return err
+	}
+	for _, keyValue := range keyValues {
+		err = common.CBStore.Delete(keyValue.Key)
+		if err != nil {
+			return err
+		}
+	}
+
+	// delete cluster
+	err = common.CBStore.Delete(clusterKey)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (self *ClusterList) SelectList(clusterKey string) error {
+	keyValues, err := common.CBStore.GetList(clusterKey, true)
+	if err != nil {
+		return err
+	}
+
+	var nodeKey string
+	self.Items = []Cluster{}
+	for _, keyValue := range keyValues {
+		if !strings.Contains(keyValue.Key, "/nodes") {
+			cluster := &Cluster{}
+			json.Unmarshal([]byte(keyValue.Value), &cluster)
+
+			nodeKey = keyValue.Key + "/nodes"
+			err = getClusterNodes(cluster, nodeKey)
+			if err != nil {
+				return err
+			}
+			self.Items = append(self.Items, *cluster)
+		}
+	}
+
+	return nil
+}
+
+func getClusterNodes(cluster *Cluster, nodeKey string) error {
+	nodeKeyValues, err := common.CBStore.GetList(nodeKey, true)
 	if err != nil {
 		return err
 	}

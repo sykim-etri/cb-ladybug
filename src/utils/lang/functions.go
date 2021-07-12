@@ -50,6 +50,42 @@ func GetStoreNodeKey(namespace string, clusterName string, nodeName string) stri
 	}
 }
 
+// get store cluster key for MCKS
+func GetStoreMCKSClusterKey(namespace string, clusterName string) string {
+	if clusterName == "" {
+		return fmt.Sprintf("/ns/%s/clusters", namespace)
+	} else {
+		return fmt.Sprintf("/ns/%s/clusters/%s", namespace, clusterName)
+	}
+}
+
+// get store node key for MCKS
+func GetStoreMCKSNodeKey(namespace string, clusterName string, nodeName string) string {
+	if nodeName == "" {
+		return fmt.Sprintf("/ns/%s/clusters/%s/nodes", namespace, clusterName)
+	} else {
+		return fmt.Sprintf("/ns/%s/clusters/%s/nodes/%s", namespace, clusterName, nodeName)
+	}
+}
+
+// get store cluster key for MCAS
+func GetStoreMCASClusterKey(namespace string, clusterName string) string {
+	if clusterName == "" {
+		return fmt.Sprintf("/ns/%s/clusters", namespace)
+	} else {
+		return fmt.Sprintf("/ns/%s/clusters/%s", namespace, clusterName)
+	}
+}
+
+// get store node key for MCAS
+func GetStoreMCASNodeKey(namespace string, clusterName string, nodeName string) string {
+	if nodeName == "" {
+		return fmt.Sprintf("/ns/%s/clusters/%s/nodes", namespace, clusterName)
+	} else {
+		return fmt.Sprintf("/ns/%s/clusters/%s/nodes/%s", namespace, clusterName, nodeName)
+	}
+}
+
 // get uuid
 func GetUid() string {
 	return uuid.New().String()
